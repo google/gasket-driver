@@ -557,17 +557,10 @@ static int gasket_perform_mapping(struct gasket_page_table *pg_tbl,
 		/* Make the DMA-space address available to the device. */
 		dma_addr = (ptes[i].dma_addr + offset) | GASKET_VALID_SLOT_FLAG;
 
-		if (is_simple_mapping) {
+		if (is_simple_mapping)
 			writeq(dma_addr, &slots[i]);
-		} else {
+		else
 			((u64 __force *)slots)[i] = dma_addr;
-			/* Extended page table vectors are in DRAM,
-			 * and so need to be synced each time they are updated.
-			 */
-			dma_map_single(pg_tbl->device,
-				       (void *)&((u64 __force *)slots)[i],
-				       sizeof(u64), DMA_TO_DEVICE);
-		}
 
 		/* Set PTE flags equal to flags param with STATUS=PTE_INUSE. */
 		ptes[i].flags = SET(FLAGS_STATUS, flags, PTE_INUSE);
@@ -639,14 +632,10 @@ static void gasket_perform_unmapping(struct gasket_page_table *pg_tbl,
 	 */
 	for (i = 0; i < num_pages; i++) {
 		/* release the address from the device, */
-		if (is_simple_mapping ||
-		    GET(FLAGS_STATUS, ptes[i].flags) == PTE_INUSE) {
+		if (is_simple_mapping)
 			writeq(0, &slots[i]);
-		} else {
+		else
 			((u64 __force *)slots)[i] = 0;
-			/* sync above PTE update before updating mappings */
-			wmb();
-		}
 
 		/* release the address from the driver, */
 		if (GET(FLAGS_STATUS, ptes[i].flags) == PTE_INUSE) {
@@ -702,6 +691,13 @@ static void gasket_unmap_extended_pages(struct gasket_page_table *pg_tbl,
 			gasket_perform_unmapping(pg_tbl,
 						 pte->sublevel + slot_idx,
 						 slot_base + slot_idx, len, 0);
+			/*
+			 * Extended page tables are in DRAM so they need to be
+			 * synced each time they are updated.
+			 */
+			dma_sync_single_for_device(pg_tbl->device,
+						   pte->dma_addr + slot_idx * sizeof(u64),
+						   len * sizeof(u64), DMA_TO_DEVICE);
 		}
 
 		remain -= len;
@@ -1044,6 +1040,14 @@ static int gasket_map_extended_pages(struct gasket_page_table *pg_tbl,
 						       num_pages);
 			return ret;
 		}
+
+		/*
+		 * Extended page tables are in DRAM so they need to be synced
+		 * each time they are updated.
+		 */
+		dma_sync_single_for_device(pg_tbl->device,
+					   pte->dma_addr + slot_idx * sizeof(u64),
+					   len * sizeof(u64), DMA_TO_DEVICE);
 
 		remain -= len;
 		slot_idx = 0;
