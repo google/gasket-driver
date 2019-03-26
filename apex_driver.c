@@ -652,7 +652,7 @@ static void apex_pci_fixup_class(struct pci_dev *pdev)
 	pdev->class = (PCI_CLASS_SYSTEM_OTHER << 8) | pdev->class;
 }
 DECLARE_PCI_FIXUP_CLASS_HEADER(APEX_PCI_VENDOR_ID, APEX_PCI_DEVICE_ID,
-			       PCI_CLASS_NOT_DEFINED, 8, apex_pci_fixup_class);
+			       PCI_ANY_ID, 8, apex_pci_fixup_class);
 
 static int apex_pci_probe(struct pci_dev *pci_dev,
 			  const struct pci_device_id *id)
@@ -663,6 +663,13 @@ static int apex_pci_probe(struct pci_dev *pci_dev,
 	struct gasket_dev *gasket_dev;
 
 	ret = pci_enable_device(pci_dev);
+#ifdef MODULE
+	if (ret) {
+		apex_pci_fixup_class(pci_dev);
+		pci_bus_assign_resources(pci_dev->bus);
+		ret = pci_enable_device(pci_dev);
+	}
+#endif
 	if (ret) {
 		dev_err(&pci_dev->dev, "error enabling PCI device\n");
 		return ret;
