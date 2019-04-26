@@ -79,6 +79,13 @@ struct gasket_sysfs_attribute {
 		.data.attr_type = _attr_type                                   \
 	}
 
+#define GASKET_SYSFS_RW(_name, _show_function, _store_function, _attr_type)    \
+	{                                                                      \
+		.attr = __ATTR(_name, S_IWUSR | S_IWGRP | S_IRUGO,             \
+				_show_function, _store_function),              \
+		.data.attr_type = _attr_type                                   \
+	}
+
 /* Initializes the Gasket sysfs subsystem.
  *
  * Description: Performs one-time initialization. Must be called before usage

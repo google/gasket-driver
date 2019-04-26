@@ -68,6 +68,10 @@ enum sysfs_attribute_type {
 	ATTR_KERNEL_HIB_SIMPLE_PAGE_TABLE_SIZE,
 	ATTR_KERNEL_HIB_NUM_ACTIVE_PAGES,
 	ATTR_TEMP,
+	ATTR_TEMP_WARN1,
+	ATTR_TEMP_WARN1_EN,
+	ATTR_TEMP_WARN2,
+	ATTR_TEMP_WARN2_EN,
 };
 
 /*
@@ -100,6 +104,7 @@ enum apex_bar2_regs {
 	APEX_BAR2_REG_IDLEGENERATOR_IDLEGEN_IDLEREGISTER = 0x4A000,
 	APEX_BAR2_REG_KERNEL_HIB_PAGE_TABLE = 0x50000,
 	APEX_BAR2_REG_OMC0_D0 = 0x01a0d0,
+	APEX_BAR2_REG_OMC0_D4 = 0x01a0d4,
 	APEX_BAR2_REG_OMC0_D8 = 0x01a0d8,
 	APEX_BAR2_REG_OMC0_DC = 0x01a0dc,
 
@@ -566,11 +571,23 @@ static long apex_ioctl(struct file *filp, uint cmd, void __user *argp)
 	}
 }
 
+/* Linear fit optimized for 25C-100C */
+static int adc_to_millic(int adc)
+{
+	return (662 - adc) * 250 + 550;
+}
+
+static int millic_to_adc(int millic)
+{
+	return (550 - millic) / 250 + 662;
+}
+
 /* Display driver sysfs entries. */
 static ssize_t sysfs_show(struct device *device, struct device_attribute *attr,
 			  char *buf)
 {
 	int ret;
+	unsigned value;
 	struct gasket_dev *gasket_dev;
 	struct gasket_sysfs_attribute *gasket_attr;
 	enum sysfs_attribute_type type;
@@ -606,13 +623,95 @@ static ssize_t sysfs_show(struct device *device, struct device_attribute *attr,
 					gasket_dev->page_table[0]));
 		break;
 	case ATTR_TEMP:
-		// Read temperature
-		ret = gasket_dev_read_32(gasket_dev, APEX_BAR_INDEX,
-						APEX_BAR2_REG_OMC0_DC);
-		ret = (ret >> 16) & ((1 << 10) - 1);
-		// Remap to millicelsius (rough calculation)
-		ret = (((662 - ret) * 1000 / 4 + 500) * 10 + 500) / 10;
-		ret = snprintf(buf, PAGE_SIZE, "%i\n", ret);
+		value = gasket_dev_read_32(gasket_dev, APEX_BAR_INDEX,
+					   APEX_BAR2_REG_OMC0_DC);
+		value = (value >> 16) & ((1 << 10) - 1);
+		ret = scnprintf(buf, PAGE_SIZE, "%i\n", adc_to_millic(value));
+		break;
+	case ATTR_TEMP_WARN1:
+		value = gasket_dev_read_32(gasket_dev, APEX_BAR_INDEX,
+					   APEX_BAR2_REG_OMC0_D4);
+		value = (value >> 16) & ((1 << 10) - 1);
+		ret = scnprintf(buf, PAGE_SIZE, "%i\n", adc_to_millic(value));
+		break;
+	case ATTR_TEMP_WARN2:
+		value = gasket_dev_read_32(gasket_dev, APEX_BAR_INDEX,
+					   APEX_BAR2_REG_OMC0_D8);
+		value = (value >> 16) & ((1 << 10) - 1);
+		ret = scnprintf(buf, PAGE_SIZE, "%i\n", adc_to_millic(value));
+		break;
+	case ATTR_TEMP_WARN1_EN:
+		value = gasket_dev_read_32(gasket_dev, APEX_BAR_INDEX,
+					   APEX_BAR2_REG_OMC0_D4);
+		ret = scnprintf(buf, PAGE_SIZE, "%i\n", value >> 31);
+		break;
+	case ATTR_TEMP_WARN2_EN:
+		value = gasket_dev_read_32(gasket_dev, APEX_BAR_INDEX,
+					   APEX_BAR2_REG_OMC0_D8);
+		ret = scnprintf(buf, PAGE_SIZE, "%i\n", value >> 31);
+		break;
+	default:
+		dev_dbg(gasket_dev->dev, "Unknown attribute: %s\n",
+			attr->attr.name);
+		ret = 0;
+		break;
+	}
+
+	gasket_sysfs_put_attr(device, gasket_attr);
+	gasket_sysfs_put_device_data(device, gasket_dev);
+	return ret;
+}
+
+/* Set driver sysfs entries. */
+static ssize_t sysfs_store(struct device *device, struct device_attribute *attr,
+			   const char *buf, size_t count)
+{
+	int ret = count, value;
+	struct gasket_dev *gasket_dev;
+	struct gasket_sysfs_attribute *gasket_attr;
+	enum sysfs_attribute_type type;
+
+	if (kstrtoint(buf, 10, &value))
+		return -EINVAL;
+
+	gasket_dev = gasket_sysfs_get_device_data(device);
+	if (!gasket_dev) {
+		dev_err(device, "No Apex device sysfs mapping found\n");
+		return -ENODEV;
+	}
+
+	gasket_attr = gasket_sysfs_get_attr(device, attr);
+	if (!gasket_attr) {
+		dev_err(device, "No Apex device sysfs attr data found\n");
+		gasket_sysfs_put_device_data(device, gasket_dev);
+		return -ENODEV;
+	}
+
+	type = (enum sysfs_attribute_type)gasket_attr->data.attr_type;
+	switch (type) {
+	case ATTR_TEMP_WARN1:
+		value = millic_to_adc(value);
+		gasket_read_modify_write_32(gasket_dev, APEX_BAR_INDEX,
+					    APEX_BAR2_REG_OMC0_D4, value, 10,
+					    16);
+		break;
+	case ATTR_TEMP_WARN2:
+		value = millic_to_adc(value);
+		gasket_read_modify_write_32(gasket_dev, APEX_BAR_INDEX,
+					    APEX_BAR2_REG_OMC0_D8, value, 10,
+					    16);
+		break;
+	case ATTR_TEMP_WARN1_EN:
+		value = value > 0 ? 1 : 0;
+		gasket_read_modify_write_32(gasket_dev, APEX_BAR_INDEX,
+					    APEX_BAR2_REG_OMC0_D4, value, 1,
+					    31);
+		break;
+	case ATTR_TEMP_WARN2_EN:
+		value = value > 0 ? 1 : 0;
+		gasket_read_modify_write_32(gasket_dev, APEX_BAR_INDEX,
+					    APEX_BAR2_REG_OMC0_D8, value, 1,
+					    31);
 		break;
 	default:
 		dev_dbg(gasket_dev->dev, "Unknown attribute: %s\n",
@@ -634,6 +733,12 @@ static struct gasket_sysfs_attribute apex_sysfs_attrs[] = {
 	GASKET_SYSFS_RO(node_0_num_mapped_pages, sysfs_show,
 			ATTR_KERNEL_HIB_NUM_ACTIVE_PAGES),
 	GASKET_SYSFS_RO(temp, sysfs_show, ATTR_TEMP),
+	GASKET_SYSFS_RW(temp_warn1, sysfs_show, sysfs_store, ATTR_TEMP_WARN1),
+	GASKET_SYSFS_RW(temp_warn1_en, sysfs_show, sysfs_store,
+			ATTR_TEMP_WARN1_EN),
+	GASKET_SYSFS_RW(temp_warn2, sysfs_show, sysfs_store, ATTR_TEMP_WARN2),
+	GASKET_SYSFS_RW(temp_warn2_en, sysfs_show, sysfs_store,
+			ATTR_TEMP_WARN2_EN),
 	GASKET_END_OF_ATTR_ARRAY
 };
 
@@ -711,17 +816,17 @@ static int apex_pci_probe(struct pci_dev *pci_dev,
 
 	// Enable thermal sensor clocks
 	gasket_read_modify_write_32(gasket_dev, APEX_BAR_INDEX,
-					APEX_BAR2_REG_OMC0_D0, 0x1, 1, 7);
+				    APEX_BAR2_REG_OMC0_D0, 0x1, 1, 7);
 
 	// Enable thermal sensor (ENAD ENVR ENBG)
 	gasket_read_modify_write_32(gasket_dev, APEX_BAR_INDEX,
-					APEX_BAR2_REG_OMC0_D8, 0x7, 3, 0);
+				    APEX_BAR2_REG_OMC0_D8, 0x7, 3, 0);
 
 	// Enable OMC thermal sensor controller
 	// This bit should be asserted 100 us after ENAD ENVR ENBG
 	schedule_timeout(usecs_to_jiffies(100));
 	gasket_read_modify_write_32(gasket_dev, APEX_BAR_INDEX,
-					APEX_BAR2_REG_OMC0_DC, 0x1, 1, 0);
+				    APEX_BAR2_REG_OMC0_DC, 0x1, 1, 0);
 
 	ret = gasket_sysfs_create_entries(gasket_dev->dev_info.device,
 					  apex_sysfs_attrs);
