@@ -1,0 +1,23 @@
+gasket-dkms (1.0-4) unstable; urgency=low
+
+  * Add thermal sysfs nodes.
+
+ -- Coral <coral-support@google.com>  Wed, 15 May 2019 21:09:24 -0700
+
+gasket-dkms (1.0-3) unstable; urgency=low
+
+  * Fix pci remove/rescan
+
+ -- Coral <coral-support@google.com>  Fri, 25 Mar 2019 17:54:48 -0700
+
+gasket-dkms (1.0-2) unstable; urgency=low
+
+  * Pull in fixes
+
+ -- Coral <coral-support@google.com>  Fri, 22 Mar 2019 15:14:39 -0700
+
+gasket-dkms (1.0-1) unstable; urgency=low
+
+  * Initial release.
+
+ -- Coral <coral-support@google.com>  Wed, 04 Mar 2019 16:12:55 +0000

@@ -1,0 +1,9 @@
+Source: gasket-dkms
+Maintainer: Coral <coral-support@google.com>
+Build-Depends: debhelper (>= 9), dkms
+Homepage: https://coral.withgoogle.com/
+
+Package: gasket-dkms
+Architecture: all
+Depends: dkms (>= 1.95), linux-headers, ${misc:Depends}
+Description: DKMS source for the gasket driver
