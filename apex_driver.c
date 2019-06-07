@@ -5,6 +5,7 @@
  * Copyright (C) 2018 Google, Inc.
  */
 
+#include <linux/atomic.h>
 #include <linux/compiler.h>
 #include <linux/delay.h>
 #include <linux/device.h>
@@ -17,6 +18,7 @@
 #include <linux/printk.h>
 #include <linux/sched.h>
 #include <linux/uaccess.h>
+#include <linux/workqueue.h>
 
 #include "apex.h"
 
@@ -62,6 +64,17 @@
 /* Wait 100 ms between checks. Total 12 sec wait maximum. */
 #define APEX_RESET_DELAY 100
 
+/* Interval between temperature polls, 0 disables polling */
+#define DEFAULT_APEX_TEMP_POLL_INTERVAL 0
+
+/* apex device private data */
+struct apex_dev {
+	struct gasket_dev *gasket_dev_ptr;
+	struct delayed_work check_temperature_work;
+	u32 adc_trip_points[3];
+	atomic_t temp_poll_interval;
+};
+
 /* Enumeration of the supported sysfs entries. */
 enum sysfs_attribute_type {
 	ATTR_KERNEL_HIB_PAGE_TABLE_SIZE,
@@ -72,6 +85,10 @@ enum sysfs_attribute_type {
 	ATTR_TEMP_WARN1_EN,
 	ATTR_TEMP_WARN2,
 	ATTR_TEMP_WARN2_EN,
+	ATTR_TEMP_TRIP0,
+	ATTR_TEMP_TRIP1,
+	ATTR_TEMP_TRIP2,
+	ATTR_TEMP_POLL_INTERVAL,
 };
 
 /*
@@ -234,7 +251,6 @@ static struct gasket_interrupt_desc apex_interrupts[] = {
 	},
 };
 
-
 /* Allows device to enter power save upon driver close(). */
 static int allow_power_save = 1;
 
@@ -252,6 +268,23 @@ module_param(allow_power_save, int, 0644);
 module_param(allow_sw_clock_gating, int, 0644);
 module_param(allow_hw_clock_gating, int, 0644);
 module_param(bypass_top_level, int, 0644);
+
+/* Temperature points in milli C at which DFS is toggled */
+#define DEFAULT_TRIP_POINT0_TEMP 85000
+#define DEFAULT_TRIP_POINT1_TEMP 90000
+#define DEFAULT_TRIP_POINT2_TEMP 95000
+
+static int trip_point0_temp = DEFAULT_TRIP_POINT0_TEMP;
+static int trip_point1_temp = DEFAULT_TRIP_POINT1_TEMP;
+static int trip_point2_temp = DEFAULT_TRIP_POINT2_TEMP;
+
+module_param(trip_point0_temp, int, 0644);
+module_param(trip_point1_temp, int, 0644);
+module_param(trip_point2_temp, int, 0644);
+
+/* Temperature poll interval in ms */
+static int temp_poll_interval = DEFAULT_APEX_TEMP_POLL_INTERVAL;
+module_param(temp_poll_interval, int, 0644);
 
 /* Check the device status registers and return device status ALIVE or DEAD. */
 static int apex_get_status(struct gasket_dev *gasket_dev)
@@ -589,12 +622,20 @@ static ssize_t sysfs_show(struct device *device, struct device_attribute *attr,
 	int ret;
 	unsigned value;
 	struct gasket_dev *gasket_dev;
+	struct apex_dev *apex_dev;
 	struct gasket_sysfs_attribute *gasket_attr;
 	enum sysfs_attribute_type type;
 
 	gasket_dev = gasket_sysfs_get_device_data(device);
 	if (!gasket_dev) {
 		dev_err(device, "No Apex device sysfs mapping found\n");
+		return -ENODEV;
+	}
+
+	if (!gasket_dev->pci_dev ||
+	    !(apex_dev = pci_get_drvdata(gasket_dev->pci_dev))) {
+		dev_err(device, "Can't find apex_dev data\n");
+		gasket_sysfs_put_device_data(device, gasket_dev);
 		return -ENODEV;
 	}
 
@@ -650,6 +691,22 @@ static ssize_t sysfs_show(struct device *device, struct device_attribute *attr,
 					   APEX_BAR2_REG_OMC0_D8);
 		ret = scnprintf(buf, PAGE_SIZE, "%i\n", value >> 31);
 		break;
+	case ATTR_TEMP_TRIP0:
+		ret = scnprintf(buf, PAGE_SIZE, "%i\n",
+				adc_to_millic(apex_dev->adc_trip_points[0]));
+		break;
+	case ATTR_TEMP_TRIP1:
+		ret = scnprintf(buf, PAGE_SIZE, "%i\n",
+				adc_to_millic(apex_dev->adc_trip_points[1]));
+		break;
+	case ATTR_TEMP_TRIP2:
+		ret = scnprintf(buf, PAGE_SIZE, "%i\n",
+				adc_to_millic(apex_dev->adc_trip_points[2]));
+		break;
+	case ATTR_TEMP_POLL_INTERVAL:
+		ret = scnprintf(buf, PAGE_SIZE, "%i\n",
+				atomic_read(&apex_dev->temp_poll_interval));
+		break;
 	default:
 		dev_dbg(gasket_dev->dev, "Unknown attribute: %s\n",
 			attr->attr.name);
@@ -668,6 +725,7 @@ static ssize_t sysfs_store(struct device *device, struct device_attribute *attr,
 {
 	int ret = count, value;
 	struct gasket_dev *gasket_dev;
+	struct apex_dev *apex_dev;
 	struct gasket_sysfs_attribute *gasket_attr;
 	enum sysfs_attribute_type type;
 
@@ -677,6 +735,13 @@ static ssize_t sysfs_store(struct device *device, struct device_attribute *attr,
 	gasket_dev = gasket_sysfs_get_device_data(device);
 	if (!gasket_dev) {
 		dev_err(device, "No Apex device sysfs mapping found\n");
+		return -ENODEV;
+	}
+
+	if (!gasket_dev->pci_dev ||
+	    !(apex_dev = pci_get_drvdata(gasket_dev->pci_dev))) {
+		dev_err(device, "Can't find apex_dev data\n");
+		gasket_sysfs_put_device_data(device, gasket_dev);
 		return -ENODEV;
 	}
 
@@ -713,6 +778,34 @@ static ssize_t sysfs_store(struct device *device, struct device_attribute *attr,
 					    APEX_BAR2_REG_OMC0_D8, value, 1,
 					    31);
 		break;
+	case ATTR_TEMP_TRIP0:
+		value = millic_to_adc(value);
+		/* Note: that adc values should be in descending order */
+		if (value >= apex_dev->adc_trip_points[1]) {
+			apex_dev->adc_trip_points[0] = value;
+		} else ret = -EINVAL;
+		break;
+	case ATTR_TEMP_TRIP1:
+		value = millic_to_adc(value);
+		if (value <= apex_dev->adc_trip_points[0] &&
+		    value >= apex_dev->adc_trip_points[2]) {
+			apex_dev->adc_trip_points[1] = value;
+		} else ret = -EINVAL;
+		break;
+	case ATTR_TEMP_TRIP2:
+		value = millic_to_adc(value);
+		if (value <= apex_dev->adc_trip_points[1]) {
+			apex_dev->adc_trip_points[2] = value;
+		} else ret = -EINVAL;
+		break;
+	case ATTR_TEMP_POLL_INTERVAL:
+		cancel_delayed_work_sync(&apex_dev->check_temperature_work);
+		atomic_set(&apex_dev->temp_poll_interval, value);
+		if (value > 0)
+			schedule_delayed_work(&apex_dev->check_temperature_work,
+					      msecs_to_jiffies(value));
+
+		break;
 	default:
 		dev_dbg(gasket_dev->dev, "Unknown attribute: %s\n",
 			attr->attr.name);
@@ -739,8 +832,83 @@ static struct gasket_sysfs_attribute apex_sysfs_attrs[] = {
 	GASKET_SYSFS_RW(temp_warn2, sysfs_show, sysfs_store, ATTR_TEMP_WARN2),
 	GASKET_SYSFS_RW(temp_warn2_en, sysfs_show, sysfs_store,
 			ATTR_TEMP_WARN2_EN),
+	GASKET_SYSFS_RW(trip_point0_temp, sysfs_show, sysfs_store,
+			ATTR_TEMP_TRIP0),
+	GASKET_SYSFS_RW(trip_point1_temp, sysfs_show, sysfs_store,
+			ATTR_TEMP_TRIP1),
+	GASKET_SYSFS_RW(trip_point2_temp, sysfs_show, sysfs_store,
+			ATTR_TEMP_TRIP2),
+	GASKET_SYSFS_RW(temp_poll_interval, sysfs_show, sysfs_store,
+			ATTR_TEMP_POLL_INTERVAL),
 	GASKET_END_OF_ATTR_ARRAY
 };
+
+static void apply_module_params(struct apex_dev *apex_dev) {
+	kernel_param_lock(THIS_MODULE);
+
+	/* use defaults if trip point temperatures are not in ascending order */
+	if (trip_point0_temp > trip_point1_temp ||
+	    trip_point1_temp > trip_point2_temp) {
+		dev_warn(apex_dev->gasket_dev_ptr->dev,
+			 "Invalid module parameters for temperature trip points"
+			 ", using defaults\n");
+		trip_point0_temp = DEFAULT_TRIP_POINT0_TEMP;
+		trip_point1_temp = DEFAULT_TRIP_POINT1_TEMP;
+		trip_point2_temp = DEFAULT_TRIP_POINT2_TEMP;
+	}
+
+	apex_dev->adc_trip_points[0] = millic_to_adc(trip_point0_temp);
+	apex_dev->adc_trip_points[1] = millic_to_adc(trip_point1_temp);
+	apex_dev->adc_trip_points[2] = millic_to_adc(trip_point2_temp);
+	atomic_set(&apex_dev->temp_poll_interval, temp_poll_interval);
+
+	kernel_param_unlock(THIS_MODULE);
+}
+
+static void check_temperature_work_handler(struct work_struct *work) {
+	int i;
+	u32 adc_temp, clk_div, tmp;
+	const u32 mask = ((1 << 2) - 1) << 28;
+	struct apex_dev *apex_dev =
+		container_of(work, struct apex_dev,
+			     check_temperature_work.work);
+	struct gasket_dev *gasket_dev = apex_dev->gasket_dev_ptr;
+
+	mutex_lock(&gasket_dev->mutex);
+
+	/* Read current temperature */
+	adc_temp = gasket_dev_read_32(gasket_dev, APEX_BAR_INDEX,
+				      APEX_BAR2_REG_OMC0_DC);
+	adc_temp = (adc_temp >> 16) & ((1 << 10) - 1);
+
+	/* Find closest trip point
+	   Note: that adc values are in descending order */
+	for (i = ARRAY_SIZE(apex_dev->adc_trip_points) - 1; i >= 0; --i) {
+		if (adc_temp <= apex_dev->adc_trip_points[i])
+			break;
+	}
+	/* Compute divider value and shift into appropriate bit location */
+	clk_div = (i + 1) << 28;
+
+	/* Modify gcb clk divider if it's different from current one */
+	tmp = gasket_dev_read_32(gasket_dev, APEX_BAR_INDEX,
+				 APEX_BAR2_REG_SCU_3);
+	if (clk_div != (tmp & mask)) {
+		tmp = (tmp & ~mask) | clk_div;
+		gasket_dev_write_32(gasket_dev, tmp, APEX_BAR_INDEX,
+				    APEX_BAR2_REG_SCU_3);
+		dev_warn(gasket_dev->dev,
+			 "Apex performance %sthrottled due to temperature\n",
+			 i == -1 ? "not " : "");
+	}
+
+	mutex_unlock(&gasket_dev->mutex);
+
+	int temp_poll_interval = atomic_read(&apex_dev->temp_poll_interval);
+	if (temp_poll_interval > 0)
+		schedule_delayed_work(&apex_dev->check_temperature_work,
+				      msecs_to_jiffies(temp_poll_interval));
+}
 
 /* On device open, perform a core reinit reset. */
 static int apex_device_open_cb(struct gasket_dev *gasket_dev)
@@ -766,6 +934,7 @@ static int apex_pci_probe(struct pci_dev *pci_dev,
 	ulong page_table_ready, msix_table_ready;
 	int retries = 0;
 	struct gasket_dev *gasket_dev;
+	struct apex_dev *apex_dev;
 
 	ret = pci_enable_device(pci_dev);
 #ifdef MODULE
@@ -789,7 +958,18 @@ static int apex_pci_probe(struct pci_dev *pci_dev,
 		return ret;
 	}
 
-	pci_set_drvdata(pci_dev, gasket_dev);
+	apex_dev = kzalloc(sizeof(*apex_dev), GFP_KERNEL);
+	if (!apex_dev) {
+		dev_err(&pci_dev->dev, "no memory for device\n");
+		ret = -ENOMEM;
+		goto remove_device;
+ 	}
+
+	INIT_DELAYED_WORK(&apex_dev->check_temperature_work,
+			  check_temperature_work_handler);
+	apex_dev->gasket_dev_ptr = gasket_dev;
+	apply_module_params(apex_dev);
+	pci_set_drvdata(pci_dev, apex_dev);
 	apex_reset(gasket_dev);
 
 	while (retries < APEX_RESET_RETRY) {
@@ -843,19 +1023,36 @@ static int apex_pci_probe(struct pci_dev *pci_dev,
 	if (allow_power_save)
 		apex_enter_reset(gasket_dev);
 
+	/* Enable thermal polling */
+	int temp_poll_interval = atomic_read(&apex_dev->temp_poll_interval);
+	if (temp_poll_interval > 0)
+		schedule_delayed_work(&apex_dev->check_temperature_work,
+				      msecs_to_jiffies(temp_poll_interval));
 	return 0;
 
 remove_device:
 	gasket_pci_remove_device(pci_dev);
 	pci_disable_device(pci_dev);
+	kfree(apex_dev);
 	return ret;
 }
 
 static void apex_pci_remove(struct pci_dev *pci_dev)
 {
-	struct gasket_dev *gasket_dev = pci_get_drvdata(pci_dev);
+	struct apex_dev *apex_dev = pci_get_drvdata(pci_dev);
+	struct gasket_dev *gasket_dev;
+
+	if (!apex_dev) {
+		dev_err(&pci_dev->dev, "NULL apex_dev\n");
+		goto remove_device;
+	}
+	gasket_dev = apex_dev->gasket_dev_ptr;
+
+	cancel_delayed_work_sync(&apex_dev->check_temperature_work);
+	kfree(apex_dev);
 
 	gasket_disable_device(gasket_dev);
+remove_device:
 	gasket_pci_remove_device(pci_dev);
 	pci_disable_device(pci_dev);
 }
