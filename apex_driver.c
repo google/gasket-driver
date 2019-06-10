@@ -282,6 +282,21 @@ module_param(trip_point0_temp, int, 0644);
 module_param(trip_point1_temp, int, 0644);
 module_param(trip_point2_temp, int, 0644);
 
+/* Hardware monitored temperature trip points in milli C
+   Apex chip drives INTR line when reaching hw_temp_warn1 temperature,
+   and SD_ALARM line when reaching hw_temp_warn2 if corresponding
+   hw_temp_warn*_en is set to true.
+ */
+static int hw_temp_warn1 = 100000;
+static int hw_temp_warn2 = 110000;
+static bool hw_temp_warn1_en = false;
+static bool hw_temp_warn2_en = false;
+
+module_param(hw_temp_warn1, int, 0644);
+module_param(hw_temp_warn2, int, 0644);
+module_param(hw_temp_warn1_en, bool, 0644);
+module_param(hw_temp_warn2_en, bool, 0644);
+
 /* Temperature poll interval in ms */
 static int temp_poll_interval = DEFAULT_APEX_TEMP_POLL_INTERVAL;
 module_param(temp_poll_interval, int, 0644);
@@ -826,11 +841,13 @@ static struct gasket_sysfs_attribute apex_sysfs_attrs[] = {
 	GASKET_SYSFS_RO(node_0_num_mapped_pages, sysfs_show,
 			ATTR_KERNEL_HIB_NUM_ACTIVE_PAGES),
 	GASKET_SYSFS_RO(temp, sysfs_show, ATTR_TEMP),
-	GASKET_SYSFS_RW(temp_warn1, sysfs_show, sysfs_store, ATTR_TEMP_WARN1),
-	GASKET_SYSFS_RW(temp_warn1_en, sysfs_show, sysfs_store,
+	GASKET_SYSFS_RW(hw_temp_warn1, sysfs_show, sysfs_store,
+			ATTR_TEMP_WARN1),
+	GASKET_SYSFS_RW(hw_temp_warn1_en, sysfs_show, sysfs_store,
 			ATTR_TEMP_WARN1_EN),
-	GASKET_SYSFS_RW(temp_warn2, sysfs_show, sysfs_store, ATTR_TEMP_WARN2),
-	GASKET_SYSFS_RW(temp_warn2_en, sysfs_show, sysfs_store,
+	GASKET_SYSFS_RW(hw_temp_warn2, sysfs_show, sysfs_store,
+			ATTR_TEMP_WARN2),
+	GASKET_SYSFS_RW(hw_temp_warn2_en, sysfs_show, sysfs_store,
 			ATTR_TEMP_WARN2_EN),
 	GASKET_SYSFS_RW(trip_point0_temp, sysfs_show, sysfs_store,
 			ATTR_TEMP_TRIP0),
@@ -861,6 +878,22 @@ static void apply_module_params(struct apex_dev *apex_dev) {
 	apex_dev->adc_trip_points[1] = millic_to_adc(trip_point1_temp);
 	apex_dev->adc_trip_points[2] = millic_to_adc(trip_point2_temp);
 	atomic_set(&apex_dev->temp_poll_interval, temp_poll_interval);
+
+	gasket_read_modify_write_32(apex_dev->gasket_dev_ptr, APEX_BAR_INDEX,
+				    APEX_BAR2_REG_OMC0_D4,
+				    millic_to_adc(hw_temp_warn1), 10, 16);
+	gasket_read_modify_write_32(apex_dev->gasket_dev_ptr, APEX_BAR_INDEX,
+				    APEX_BAR2_REG_OMC0_D8,
+				    millic_to_adc(hw_temp_warn2), 10, 16);
+	if (hw_temp_warn1_en)
+		gasket_read_modify_write_32(apex_dev->gasket_dev_ptr,
+					    APEX_BAR_INDEX,
+					    APEX_BAR2_REG_OMC0_D4, 1, 1, 31);
+
+	if (hw_temp_warn2_en)
+		gasket_read_modify_write_32(apex_dev->gasket_dev_ptr,
+					    APEX_BAR_INDEX,
+					    APEX_BAR2_REG_OMC0_D8, 1, 1, 31);
 
 	kernel_param_unlock(THIS_MODULE);
 }
