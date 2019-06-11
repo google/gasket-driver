@@ -65,7 +65,7 @@
 #define APEX_RESET_DELAY 100
 
 /* Interval between temperature polls, 0 disables polling */
-#define DEFAULT_APEX_TEMP_POLL_INTERVAL 0
+#define DEFAULT_APEX_TEMP_POLL_INTERVAL 5000
 
 /* apex device private data */
 struct apex_dev {
@@ -288,9 +288,9 @@ module_param(trip_point2_temp, int, 0644);
    hw_temp_warn*_en is set to true.
  */
 static int hw_temp_warn1 = 100000;
-static int hw_temp_warn2 = 110000;
+static int hw_temp_warn2 = 100000;
 static bool hw_temp_warn1_en = false;
-static bool hw_temp_warn2_en = false;
+static bool hw_temp_warn2_en = true;
 
 module_param(hw_temp_warn1, int, 0644);
 module_param(hw_temp_warn2, int, 0644);
