@@ -1,3 +1,9 @@
+gasket-dkms (1.0-6) unstable; urgency=low
+  * Enable DFS and thermal shutdown by default.
+  * Add DFS support.
+
+ -- Coral <coral-support@google.com>  Tue, 11 Jun 2019 12:04:55 -0700
+
 gasket-dkms (1.0-5) unstable; urgency=low
 
   * Add missing dkms file.
