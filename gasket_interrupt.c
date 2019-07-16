@@ -81,8 +81,8 @@ static void gasket_interrupt_setup(struct gasket_dev *gasket_dev)
 {
 	int i;
 	int pack_shift;
-	ulong mask;
-	ulong value;
+	u64 mask;
+	u64 value;
 	struct gasket_interrupt_data *interrupt_data =
 		gasket_dev->interrupt_data;
 

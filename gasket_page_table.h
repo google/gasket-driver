@@ -97,7 +97,7 @@ int gasket_page_table_partition(struct gasket_page_table *page_table,
  *              If there is an error, no pages are mapped.
  */
 int gasket_page_table_map(struct gasket_page_table *page_table, ulong host_addr,
-			  ulong dev_addr, uint num_pages, u32 flags);
+			  u64 dev_addr, uint num_pages, u32 flags);
 
 /*
  * Un-map host pages from device memory.
@@ -165,7 +165,7 @@ int gasket_page_table_lookup_page(struct gasket_page_table *page_table,
  * Returns true if the mapping is bad, false otherwise.
  */
 bool gasket_page_table_are_addrs_bad(struct gasket_page_table *page_table,
-				     ulong host_addr, ulong dev_addr,
+				     ulong host_addr, u64 dev_addr,
 				     ulong bytes);
 
 /*
