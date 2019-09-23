@@ -18,12 +18,6 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 
-#define writeq_relaxed writeq
-#define writeq(__value, __reg) \
-  (*(volatile u64 __force *)(__reg) = (cpu_to_le64(__value)))
-#define readq_relaxed readq
-#define readq(__reg) le64_to_cpu(*(volatile u64 __force *)(__reg))
-
 #include "gasket_constants.h"
 
 /**
