@@ -14,6 +14,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/pci.h>
+#include <linux/platform_device.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 
@@ -265,8 +266,11 @@ struct gasket_dev {
 	/* Device info */
 	struct device *dev;
 
-	/* PCI subsystem metadata. */
+	/* PCI device pointer for PCI devices */
 	struct pci_dev *pci_dev;
+
+	/* Platform device pointer for platform devices */
+	struct platform_device *platform_dev;
 
 	/* This device's index into internal_desc->devs. */
 	int dev_idx;
@@ -538,6 +542,13 @@ int gasket_pci_add_device(struct pci_dev *pci_dev,
 			  struct gasket_dev **gasket_devp);
 /* Remove a PCI gasket device. */
 void gasket_pci_remove_device(struct pci_dev *pci_dev);
+
+/* Add a platform gasket device. */
+int gasket_platform_add_device(struct platform_device *pdev,
+			       struct gasket_dev **gasket_devp);
+
+/* Remove a platform gasket device. */
+void gasket_platform_remove_device(struct platform_device *pdev);
 
 /* Enable a Gasket device. */
 int gasket_enable_device(struct gasket_dev *gasket_dev);

@@ -24,6 +24,7 @@
 #include <linux/init.h>
 #include <linux/of.h>
 #include <linux/pid_namespace.h>
+#include <linux/platform_device.h>
 #include <linux/printk.h>
 #include <linux/sched.h>
 
@@ -662,6 +663,25 @@ lookup_pci_internal_desc(struct pci_dev *pci_dev)
 		if (g_descs[i].driver_desc &&
 		    g_descs[i].driver_desc->pci_id_table &&
 		    pci_match_id(g_descs[i].driver_desc->pci_id_table, pci_dev))
+			return &g_descs[i];
+	}
+
+	return NULL;
+}
+
+/*
+ * Registered driver descriptor lookup for platform devices.
+ * Caller must hold g_mutex.
+ */
+static struct gasket_internal_desc *
+lookup_platform_internal_desc(struct platform_device *pdev)
+{
+	int i;
+
+	__must_hold(&g_mutex);
+	for (i = 0; i < GASKET_FRAMEWORK_DESC_MAX; i++) {
+		if (g_descs[i].driver_desc &&
+		    strcmp(g_descs[i].driver_desc->name, pdev->name) == 0)
 			return &g_descs[i];
 	}
 
@@ -1556,6 +1576,72 @@ void gasket_pci_remove_device(struct pci_dev *pci_dev)
 	__gasket_remove_device(internal_desc, gasket_dev);
 }
 EXPORT_SYMBOL(gasket_pci_remove_device);
+
+/* Add platform gasket device. Called by Gasket device probe function. */
+int gasket_platform_add_device(struct platform_device *pdev,
+			       struct gasket_dev **gasket_devp)
+{
+	int ret;
+	struct gasket_internal_desc *internal_desc;
+	struct gasket_dev *gasket_dev;
+	struct device *parent;
+
+	dev_dbg(&pdev->dev, "add platform gasket device\n");
+
+	mutex_lock(&g_mutex);
+	internal_desc = lookup_platform_internal_desc(pdev);
+	mutex_unlock(&g_mutex);
+	if (!internal_desc) {
+		dev_err(&pdev->dev,
+			"%s called for unknown driver type\n", __func__);
+		return -ENODEV;
+	}
+
+	parent = &pdev->dev;
+	ret = __gasket_add_device(parent, internal_desc, &gasket_dev);
+	if (ret)
+		return ret;
+
+	gasket_dev->platform_dev = pdev;
+	*gasket_devp = gasket_dev;
+	return 0;
+}
+EXPORT_SYMBOL(gasket_platform_add_device);
+
+/* Remove a platform gasket device. */
+void gasket_platform_remove_device(struct platform_device *pdev)
+{
+	int i;
+	struct gasket_internal_desc *internal_desc;
+	struct gasket_dev *gasket_dev = NULL;
+
+	/* Find the device desc. */
+	mutex_lock(&g_mutex);
+	internal_desc = lookup_platform_internal_desc(pdev);
+	mutex_unlock(&g_mutex);
+	if (!internal_desc)
+		return;
+
+	/* Now find the specific device */
+	mutex_lock(&internal_desc->mutex);
+	for (i = 0; i < GASKET_DEV_MAX; i++) {
+		if (internal_desc->devs[i] &&
+		    internal_desc->devs[i]->platform_dev == pdev) {
+			gasket_dev = internal_desc->devs[i];
+			break;
+		}
+	}
+	mutex_unlock(&internal_desc->mutex);
+
+	if (!gasket_dev)
+		return;
+
+	dev_dbg(gasket_dev->dev, "remove %s platform gasket device\n",
+		internal_desc->driver_desc->name);
+
+	__gasket_remove_device(internal_desc, gasket_dev);
+}
+EXPORT_SYMBOL(gasket_platform_remove_device);
 
 /**
  * Lookup a name by number in a num_name table.
