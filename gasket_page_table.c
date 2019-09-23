@@ -320,7 +320,7 @@ static void gasket_free_extended_subtable(struct gasket_page_table *pg_tbl,
 
 	if (pte->dma_addr)
 		dma_unmap_page(pg_tbl->device, pte->dma_addr, PAGE_SIZE,
-			       DMA_BIDIRECTIONAL);
+			       DMA_TO_DEVICE);
 
 	vfree(pte->sublevel);
 
@@ -612,7 +612,7 @@ static void gasket_perform_unmapping(struct gasket_page_table *pg_tbl,
 		if (ptes[i].status == PTE_INUSE) {
 			if (ptes[i].dma_addr) {
 				dma_unmap_page(pg_tbl->device, ptes[i].dma_addr,
-					       PAGE_SIZE, DMA_FROM_DEVICE);
+					       PAGE_SIZE, DMA_BIDIRECTIONAL);
 			}
 			if (gasket_release_page(ptes[i].page))
 				--pg_tbl->num_active_pages;
@@ -894,7 +894,7 @@ static int gasket_alloc_extended_subtable(struct gasket_page_table *pg_tbl,
 
 	/* Map the page into DMA space. */
 	pte->dma_addr = dma_map_page(pg_tbl->device, pte->page, 0, PAGE_SIZE,
-				     DMA_BIDIRECTIONAL);
+				     DMA_TO_DEVICE);
 
 	/* make the addresses available to the device */
 	dma_addr = (pte->dma_addr + pte->offset) | GASKET_VALID_SLOT_FLAG;
