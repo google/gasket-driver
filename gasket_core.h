@@ -56,6 +56,7 @@ enum gasket_interrupt_packing {
 /* Type of the interrupt supported by the device. */
 enum gasket_interrupt_type {
 	PCI_MSIX = 0,
+	DEVICE_MANAGED = 1, /* Managed externally in device driver */
 };
 
 /*

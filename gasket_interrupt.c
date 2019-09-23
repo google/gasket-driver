@@ -93,6 +93,9 @@ static void gasket_interrupt_setup(struct gasket_dev *gasket_dev)
 
 	dev_dbg(gasket_dev->dev, "Running interrupt setup\n");
 
+	if (interrupt_data->type == DEVICE_MANAGED)
+		return; /* device driver handles setup */
+
 	/* Setup the MSIX table. */
 
 	for (i = 0; i < interrupt_data->num_interrupts; i++) {
@@ -145,7 +148,7 @@ static void gasket_interrupt_setup(struct gasket_dev *gasket_dev)
 	}
 }
 
-static void
+void
 gasket_handle_interrupt(struct gasket_interrupt_data *interrupt_data,
 			int interrupt_index)
 {
@@ -340,7 +343,6 @@ int gasket_interrupt_init(struct gasket_dev *gasket_dev)
 	interrupt_data->interrupts = driver_desc->interrupts;
 	interrupt_data->interrupt_bar_index = driver_desc->interrupt_bar_index;
 	interrupt_data->pack_width = driver_desc->interrupt_pack_width;
-	interrupt_data->num_configured = 0;
 
 	interrupt_data->eventfd_ctxs = kcalloc(driver_desc->num_interrupts,
 					       sizeof(struct eventfd_ctx *),
@@ -367,6 +369,11 @@ int gasket_interrupt_init(struct gasket_dev *gasket_dev)
 		if (ret)
 			break;
 		force_msix_interrupt_unmasking(gasket_dev);
+		break;
+
+	case DEVICE_MANAGED:  /* Device driver manages IRQ init */
+		interrupt_data->num_configured = interrupt_data->num_interrupts;
+		ret = 0;
 		break;
 
 	default:
@@ -426,6 +433,10 @@ int gasket_interrupt_reinit(struct gasket_dev *gasket_dev)
 		force_msix_interrupt_unmasking(gasket_dev);
 		break;
 
+	case DEVICE_MANAGED: /* Device driver manages IRQ reinit */
+		ret = 0;
+		break;
+
 	default:
 		ret = -EINVAL;
 	}
@@ -469,6 +480,9 @@ void gasket_interrupt_cleanup(struct gasket_dev *gasket_dev)
 	switch (interrupt_data->type) {
 	case PCI_MSIX:
 		gasket_interrupt_msix_cleanup(interrupt_data);
+		break;
+
+	case DEVICE_MANAGED: /* Device driver manages IRQ cleanup */
 		break;
 
 	default:
