@@ -531,7 +531,7 @@ static int gasket_perform_mapping(struct gasket_page_table *pg_tbl,
 					      ptes[i].dma_addr)) {
 				dev_dbg(pg_tbl->device,
 					"%s i %d -> fail to map page %llx "
-					"[pfn %p ohys %p]\n",
+					"[pfn %p phys %p]\n",
 					__func__, i,
 					(unsigned long long)ptes[i].dma_addr,
 					(void *)page_to_pfn(page),
