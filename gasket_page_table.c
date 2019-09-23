@@ -909,6 +909,22 @@ static int gasket_alloc_extended_subtable(struct gasket_page_table *pg_tbl,
 	/* Map the page into DMA space. */
 	pte->dma_addr = dma_map_page(pg_tbl->device, pte->page, 0, PAGE_SIZE,
 				     DMA_TO_DEVICE);
+	if (dma_mapping_error(pg_tbl->device, pte->dma_addr)) {
+		dev_dbg(pg_tbl->device,
+			"%s -> fail to map page %llx "
+			"[pfn %p phys %p]\n",
+			__func__,
+			(unsigned long long)pte->dma_addr,
+			(void *)page_to_pfn(pte->page),
+			(void *)page_to_phys(pte->page));
+
+		/* clean up */
+		free_page(page_addr);
+		vfree(pte->sublevel);
+		memset(pte, 0, sizeof(struct gasket_page_table_entry));
+
+		return -ENOMEM;
+	}
 
 	/* make the addresses available to the device */
 	dma_addr = (pte->dma_addr + pte->offset) | GASKET_VALID_SLOT_FLAG;
