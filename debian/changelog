@@ -1,4 +1,12 @@
+gasket-dkms (1.0-7) unstable; urgency=low
+
+  * Update to latest version.
+  * Add dma_bit_mask gasket module parameter.
+
+ -- Coral <coral-support@google.com>  Mon, 23 Sep 2019 15:06:40 -0700
+
 gasket-dkms (1.0-6) unstable; urgency=low
+
   * Enable DFS and thermal shutdown by default.
   * Add DFS support.
 
