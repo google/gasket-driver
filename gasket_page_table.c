@@ -500,7 +500,7 @@ static int gasket_perform_mapping(struct gasket_page_table *pg_tbl,
 					(unsigned long long)ptes[i].dma_addr,
 					(void *)page_to_pfn(page),
 					(void *)page_to_phys(page));
-				return -1;
+				return -EINVAL;
 			}
 		}
 
@@ -1147,7 +1147,7 @@ fail:
 	*ppage = NULL;
 	*poffset = 0;
 	mutex_unlock(&pg_tbl->mutex);
-	return -1;
+	return -EINVAL;
 }
 
 /* See gasket_page_table.h for description. */
