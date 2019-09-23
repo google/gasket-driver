@@ -899,7 +899,7 @@ static void apply_module_params(struct apex_dev *apex_dev) {
 }
 
 static void check_temperature_work_handler(struct work_struct *work) {
-	int i;
+	int i, temp_poll_interval;
 	u32 adc_temp, clk_div, tmp;
 	const u32 mask = ((1 << 2) - 1) << 28;
 	struct apex_dev *apex_dev =
@@ -937,7 +937,7 @@ static void check_temperature_work_handler(struct work_struct *work) {
 
 	mutex_unlock(&gasket_dev->mutex);
 
-	int temp_poll_interval = atomic_read(&apex_dev->temp_poll_interval);
+	temp_poll_interval = atomic_read(&apex_dev->temp_poll_interval);
 	if (temp_poll_interval > 0)
 		schedule_delayed_work(&apex_dev->check_temperature_work,
 				      msecs_to_jiffies(temp_poll_interval));
@@ -963,7 +963,7 @@ DECLARE_PCI_FIXUP_CLASS_HEADER(APEX_PCI_VENDOR_ID, APEX_PCI_DEVICE_ID,
 static int apex_pci_probe(struct pci_dev *pci_dev,
 			  const struct pci_device_id *id)
 {
-	int ret;
+	int ret, temp_poll_interval;
 	ulong page_table_ready, msix_table_ready;
 	int retries = 0;
 	struct gasket_dev *gasket_dev;
@@ -1057,7 +1057,7 @@ static int apex_pci_probe(struct pci_dev *pci_dev,
 		apex_enter_reset(gasket_dev);
 
 	/* Enable thermal polling */
-	int temp_poll_interval = atomic_read(&apex_dev->temp_poll_interval);
+	temp_poll_interval = atomic_read(&apex_dev->temp_poll_interval);
 	if (temp_poll_interval > 0)
 		schedule_delayed_work(&apex_dev->check_temperature_work,
 				      msecs_to_jiffies(temp_poll_interval));
