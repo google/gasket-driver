@@ -636,9 +636,10 @@ static void gasket_perform_unmapping(struct gasket_page_table *pg_tbl,
 
 		/* release the address from the driver, */
 		if (GET(FLAGS_STATUS, ptes[i].flags) == PTE_INUSE) {
-			if (ptes[i].dma_addr) {
+			if (ptes[i].page && ptes[i].dma_addr) {
 				dma_unmap_page(pg_tbl->device, ptes[i].dma_addr, PAGE_SIZE,
-					       GET(FLAGS_DMA_DIRECTION, ptes[i].flags));			}
+					       GET(FLAGS_DMA_DIRECTION, ptes[i].flags));
+			}
 			if (gasket_release_page(ptes[i].page))
 				--pg_tbl->num_active_pages;
 		}
