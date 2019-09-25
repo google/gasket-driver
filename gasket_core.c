@@ -103,6 +103,16 @@ enum gasket_sysfs_attribute_type {
 	ATTR_USER_MEM_RANGES
 };
 
+/* On some arm64 systems pcie dma controller can only access lower 4GB of
+ * addresses. Unfortunately vendor BSP isn't providing any means of determining
+ * this limitation and there're no errors reported if access to higher addresses
+ * if being done. This parameter allows to workaround this issue by pretending
+ * that our device only supports 32 bit addresses. This in turn will cause
+ * dma driver to use shadow buffers located in low 32 bit address space.
+ */
+static int dma_bit_mask = 64;
+module_param(dma_bit_mask, int, 0644);
+
 /* Perform a standard Gasket callback. */
 static inline int
 check_and_invoke_callback(struct gasket_dev *gasket_dev,
@@ -316,8 +326,9 @@ static int gasket_map_pci_bar(struct gasket_dev *gasket_dev, int bar_num)
 		goto fail;
 	}
 
-	dma_set_mask(&gasket_dev->pci_dev->dev, DMA_BIT_MASK(64));
-	dma_set_coherent_mask(&gasket_dev->pci_dev->dev, DMA_BIT_MASK(64));
+	dma_set_mask(&gasket_dev->pci_dev->dev, DMA_BIT_MASK(dma_bit_mask));
+	dma_set_coherent_mask(&gasket_dev->pci_dev->dev,
+			      DMA_BIT_MASK(dma_bit_mask));
 
 	return 0;
 
