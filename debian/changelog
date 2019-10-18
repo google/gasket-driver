@@ -1,3 +1,9 @@
+gasket-dkms (1.0-8) unstable; urgency=low
+
+  * Add unique chip id sysfs node.
+
+ -- Coral <coral-support@google.com>  Fri, 18 Oct 2019 12:38:57 -0700
+
 gasket-dkms (1.0-7) unstable; urgency=low
 
   * Update to latest version.
