@@ -89,6 +89,7 @@ enum sysfs_attribute_type {
 	ATTR_TEMP_TRIP1,
 	ATTR_TEMP_TRIP2,
 	ATTR_TEMP_POLL_INTERVAL,
+	ATTR_UNIQUE_ID,
 };
 
 /*
@@ -124,6 +125,10 @@ enum apex_bar2_regs {
 	APEX_BAR2_REG_OMC0_D4 = 0x01a0d4,
 	APEX_BAR2_REG_OMC0_D8 = 0x01a0d8,
 	APEX_BAR2_REG_OMC0_DC = 0x01a0dc,
+	APEX_BAR2_REG_EFUSE_DC = 0x01a2dc,
+	APEX_BAR2_REG_EFUSE_E0 = 0x01a2e0,
+	APEX_BAR2_REG_EFUSE_E4 = 0x01a2e4,
+	APEX_BAR2_REG_EFUSE_E8 = 0x01a2e8,
 
 	/* Error registers - Used mostly for debug */
 	APEX_BAR2_REG_USER_HIB_ERROR_STATUS = 0x86f0,
@@ -635,7 +640,7 @@ static ssize_t sysfs_show(struct device *device, struct device_attribute *attr,
 			  char *buf)
 {
 	int ret;
-	unsigned value;
+	unsigned value, value2, value3, value4;
 	struct gasket_dev *gasket_dev;
 	struct apex_dev *apex_dev;
 	struct gasket_sysfs_attribute *gasket_attr;
@@ -722,6 +727,19 @@ static ssize_t sysfs_show(struct device *device, struct device_attribute *attr,
 		ret = scnprintf(buf, PAGE_SIZE, "%i\n",
 				atomic_read(&apex_dev->temp_poll_interval));
 		break;
+	case ATTR_UNIQUE_ID:
+		value = gasket_dev_read_32(gasket_dev, APEX_BAR_INDEX,
+					   APEX_BAR2_REG_EFUSE_DC);
+		value2 = gasket_dev_read_32(gasket_dev, APEX_BAR_INDEX,
+					    APEX_BAR2_REG_EFUSE_E0);
+		value3 = gasket_dev_read_32(gasket_dev, APEX_BAR_INDEX,
+					    APEX_BAR2_REG_EFUSE_E4);
+		value4 = gasket_dev_read_32(gasket_dev, APEX_BAR_INDEX,
+					    APEX_BAR2_REG_EFUSE_E8);
+		ret = snprintf(buf, PAGE_SIZE, "%.8x%.8x%.8x%.8x\n", value4,
+			       value3, value2, value);
+		break;
+
 	default:
 		dev_dbg(gasket_dev->dev, "Unknown attribute: %s\n",
 			attr->attr.name);
@@ -857,6 +875,7 @@ static struct gasket_sysfs_attribute apex_sysfs_attrs[] = {
 			ATTR_TEMP_TRIP2),
 	GASKET_SYSFS_RW(temp_poll_interval, sysfs_show, sysfs_store,
 			ATTR_TEMP_POLL_INTERVAL),
+	GASKET_SYSFS_RO(unique_id, sysfs_show, ATTR_UNIQUE_ID),
 	GASKET_END_OF_ATTR_ARRAY
 };
 
