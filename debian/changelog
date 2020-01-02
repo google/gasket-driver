@@ -1,3 +1,9 @@
+gasket-dkms (1.0-10) unstable; urgency=low
+
+  * Fix linux-headers dependency.
+
+ -- Coral <coral-support@google.com>  Thu, 02 Jan 2020 14:19:30 -0800
+
 gasket-dkms (1.0-9) unstable; urgency=low
 
   * Increase gasket version.

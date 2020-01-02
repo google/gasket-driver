@@ -5,5 +5,5 @@ Homepage: https://coral.withgoogle.com/
 
 Package: gasket-dkms
 Architecture: all
-Depends: dkms (>= 1.95), linux-headers, ${misc:Depends}
+Depends: dkms (>= 1.95), linux-headers-686-pae | linux-headers-amd64 | linux-headers-generic | linux-headers, ${misc:Depends}
 Description: DKMS source for the gasket driver
