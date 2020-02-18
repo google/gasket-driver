@@ -74,6 +74,21 @@ struct gasket_coherent_alloc_config_ioctl {
 	u64 dma_address;
 };
 
+/*
+ * Common structure for ioctls mapping and unmapping dma-bufs when using the
+ * Gasket page_table module.
+ * map: boolean, non-zero to map, 0 to unmap.
+ * flags: see gasket_page_table_ioctl_flags.flags.
+ */
+struct gasket_page_table_ioctl_dmabuf {
+	u64 page_table_index;
+	u64 device_address;
+	int dmabuf_fd;
+	u32 num_pages;
+	u32 map;
+	u32 flags;
+};
+
 /* Base number for all Gasket-common IOCTLs */
 #define GASKET_IOCTL_BASE 0xDC
 
@@ -151,5 +166,12 @@ struct gasket_coherent_alloc_config_ioctl {
  */
 #define GASKET_IOCTL_MAP_BUFFER_FLAGS                                          \
 	_IOW(GASKET_IOCTL_BASE, 12, struct gasket_page_table_ioctl_flags)
+
+/*
+ * Tells the kernel to map/unmap dma-buf with fd to device_address in
+ * page_table_index page table.
+ */
+#define GASKET_IOCTL_MAP_DMABUF                                                \
+	_IOW(GASKET_IOCTL_BASE, 13, struct gasket_page_table_ioctl_dmabuf)
 
 #endif /* __GASKET_H__ */

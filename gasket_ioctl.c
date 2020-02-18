@@ -212,6 +212,38 @@ static int gasket_unmap_buffers(struct gasket_dev *gasket_dev,
 	return 0;
 }
 
+/* Map/unmap dma-buf to/from a device virtual address. */
+static int gasket_map_dmabuf(struct gasket_dev *gasket_dev,
+			     struct gasket_page_table_ioctl_dmabuf __user *argp)
+{
+	struct gasket_page_table_ioctl_dmabuf dbuf;
+	struct gasket_page_table *pg_tbl;
+
+	if (copy_from_user(&dbuf, argp, sizeof(dbuf)))
+		return -EFAULT;
+
+	if (dbuf.page_table_index >= gasket_dev->num_page_tables)
+		return -EFAULT;
+
+	pg_tbl = gasket_dev->page_table[dbuf.page_table_index];
+	if (gasket_page_table_is_dev_addr_bad(pg_tbl,
+					      dbuf.device_address,
+					      dbuf.num_pages * PAGE_SIZE))
+		return -EINVAL;
+
+	if (dbuf.map)
+		return gasket_page_table_map_dmabuf(pg_tbl,
+						    dbuf.dmabuf_fd,
+						    dbuf.device_address,
+						    dbuf.num_pages,
+						    dbuf.flags);
+	else
+		return gasket_page_table_unmap_dmabuf(pg_tbl,
+						      dbuf.dmabuf_fd,
+						      dbuf.device_address,
+						      dbuf.num_pages);
+}
+
 /*
  * Reserve structures for coherent allocation, and allocate or free the
  * corresponding memory.
@@ -291,6 +323,7 @@ static bool gasket_ioctl_check_permissions(struct file *filp, uint cmd)
 	case GASKET_IOCTL_MAP_BUFFER:
 	case GASKET_IOCTL_MAP_BUFFER_FLAGS:
 	case GASKET_IOCTL_UNMAP_BUFFER:
+	case GASKET_IOCTL_MAP_DMABUF:
 		return alive && write;
 
 	case GASKET_IOCTL_CLEAR_EVENTFD:
@@ -388,6 +421,9 @@ long gasket_handle_ioctl(struct file *filp, uint cmd, void __user *argp)
 		trace_gasket_ioctl_integer_data(0);
 		retval = gasket_interrupt_reset_counts(gasket_dev);
 		break;
+	case GASKET_IOCTL_MAP_DMABUF:
+		retval = gasket_map_dmabuf(gasket_dev, argp);
+		break;
 	default:
 		/* If we don't understand the ioctl, the best we can do is trace
 		 * the arg.
@@ -424,6 +460,7 @@ long gasket_is_supported_ioctl(uint cmd)
 	case GASKET_IOCTL_MAP_BUFFER:
 	case GASKET_IOCTL_MAP_BUFFER_FLAGS:
 	case GASKET_IOCTL_UNMAP_BUFFER:
+	case GASKET_IOCTL_MAP_DMABUF:
 	case GASKET_IOCTL_CLEAR_INTERRUPT_COUNTS:
 	case GASKET_IOCTL_CONFIG_COHERENT_ALLOCATOR:
 		return 1;

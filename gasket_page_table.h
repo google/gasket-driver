@@ -100,6 +100,38 @@ int gasket_page_table_map(struct gasket_page_table *page_table, ulong host_addr,
 			  u64 dev_addr, uint num_pages, u32 flags);
 
 /*
+ * Map dma-buf pages into device memory.
+ * @page_table: Gasket page table pointer.
+ * @fd: Dma-buf file descriptor.
+ * @dev_addr: Starting device address of the pages.
+ * @num_pages: Number of [4kB] pages to map.
+ * @flags: Specifies attributes to apply to the pages.
+ *         Internal structure matches gasket_page_table_ioctl_flags.flags.
+ *
+ * Description: Maps "num_pages" pages of dma-buf pointed to by
+ *              fd to the address "dev_addr" in device memory.
+ *
+ *              The caller is responsible for checking the dev_addr range.
+ *
+ *              Returns 0 if successful or a non-zero error number otherwise.
+ *              If there is an error, no pages are mapped.
+ */
+int gasket_page_table_map_dmabuf(struct gasket_page_table *page_table, int fd,
+				 u64 dev_addr, uint num_pages, u32 flags);
+
+/*
+ * Unmap dma-buf pages from device memory.
+ * @page_table: Gasket page table pointer.
+ * @fd: Dma-buf file descriptor.
+ * @dev_addr: Starting device address of the pages.
+ * @num_pages: Number of [4kB] pages to map.
+ *
+ * Description: The inverse of gasket_page_table_map_dmabuf.
+ */
+int gasket_page_table_unmap_dmabuf(struct gasket_page_table *page_table, int fd,
+				   u64 dev_addr, uint num_pages);
+
+/*
  * Un-map host pages from device memory.
  * @page_table: Gasket page table pointer.
  * @dev_addr: Starting device address of the pages to unmap.
