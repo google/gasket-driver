@@ -508,6 +508,7 @@ static int gasket_perform_mapping(struct gasket_page_table *pg_tbl,
 	dma_addr_t dma_addr;
 	ulong page_addr;
 	int i;
+	enum dma_data_direction direction;
 
 	/* Must have a virtual host address or a sg iterator, but not both. */
 	if(!((uintptr_t)host_addr ^ (uintptr_t)sg_iter)) {
@@ -515,7 +516,8 @@ static int gasket_perform_mapping(struct gasket_page_table *pg_tbl,
 		return -EINVAL;
 	}
 
-	if (GET(FLAGS_DMA_DIRECTION, flags) == DMA_NONE) {
+	direction = GET(FLAGS_DMA_DIRECTION, flags);
+	if (direction == DMA_NONE) {
 		dev_err(pg_tbl->device, "invalid DMA direction flags=0x%lx\n",
 			(unsigned long)flags);
 		return -EINVAL;
@@ -542,7 +544,8 @@ static int gasket_perform_mapping(struct gasket_page_table *pg_tbl,
 			ptes[i].dma_addr = pg_tbl->coherent_pages[0].paddr +
 					   off + i * PAGE_SIZE;
 		} else {
-			ret = get_user_pages_fast(page_addr - offset, 1, 1,
+			ret = get_user_pages_fast(page_addr - offset, 1,
+						  direction != DMA_TO_DEVICE,
 						  &page);
 
 			if (ret <= 0) {
