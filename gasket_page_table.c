@@ -1263,7 +1263,6 @@ int gasket_page_table_unmap_dmabuf(struct gasket_page_table *pg_tbl, int fd,
 				   u64 dev_addr, uint num_pages)
 {
 	struct dma_buf *dmabuf;
-	struct gasket_dmabuf_mapping *mapping, *tmp;
 
 	dmabuf = dma_buf_get(fd);
 	if (IS_ERR(dmabuf))
