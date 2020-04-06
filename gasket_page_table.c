@@ -511,7 +511,7 @@ static int gasket_perform_mapping(struct gasket_page_table *pg_tbl,
 	enum dma_data_direction direction;
 
 	/* Must have a virtual host address or a sg iterator, but not both. */
-	if(!((uintptr_t)host_addr ^ (uintptr_t)sg_iter)) {
+	if (!((uintptr_t)host_addr ^ (uintptr_t)sg_iter)) {
 		dev_err(pg_tbl->device, "need sg_iter or host_addr\n");
 		return -EINVAL;
 	}
