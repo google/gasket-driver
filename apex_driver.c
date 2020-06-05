@@ -73,6 +73,10 @@ struct apex_dev {
 	struct delayed_work check_temperature_work;
 	u32 adc_trip_points[3];
 	atomic_t temp_poll_interval;
+	u32 hw_temp_warn1_adc;
+	u32 hw_temp_warn2_adc;
+	bool hw_temp_warn1_en;
+	bool hw_temp_warn2_en;
 };
 
 /* Enumeration of the supported sysfs entries. */
@@ -690,26 +694,20 @@ static ssize_t sysfs_show(struct device *device, struct device_attribute *attr,
 		ret = scnprintf(buf, PAGE_SIZE, "%i\n", adc_to_millic(value));
 		break;
 	case ATTR_TEMP_WARN1:
-		value = gasket_dev_read_32(gasket_dev, APEX_BAR_INDEX,
-					   APEX_BAR2_REG_OMC0_D4);
-		value = (value >> 16) & ((1 << 10) - 1);
-		ret = scnprintf(buf, PAGE_SIZE, "%i\n", adc_to_millic(value));
+		ret = scnprintf(buf, PAGE_SIZE, "%i\n",
+				adc_to_millic(apex_dev->hw_temp_warn1_adc));
 		break;
 	case ATTR_TEMP_WARN2:
-		value = gasket_dev_read_32(gasket_dev, APEX_BAR_INDEX,
-					   APEX_BAR2_REG_OMC0_D8);
-		value = (value >> 16) & ((1 << 10) - 1);
-		ret = scnprintf(buf, PAGE_SIZE, "%i\n", adc_to_millic(value));
+		ret = scnprintf(buf, PAGE_SIZE, "%i\n",
+				adc_to_millic(apex_dev->hw_temp_warn2_adc));
 		break;
 	case ATTR_TEMP_WARN1_EN:
-		value = gasket_dev_read_32(gasket_dev, APEX_BAR_INDEX,
-					   APEX_BAR2_REG_OMC0_D4);
-		ret = scnprintf(buf, PAGE_SIZE, "%i\n", value >> 31);
+		ret = scnprintf(buf, PAGE_SIZE, "%i\n",
+				apex_dev->hw_temp_warn1_en);
 		break;
 	case ATTR_TEMP_WARN2_EN:
-		value = gasket_dev_read_32(gasket_dev, APEX_BAR_INDEX,
-					   APEX_BAR2_REG_OMC0_D8);
-		ret = scnprintf(buf, PAGE_SIZE, "%i\n", value >> 31);
+		ret = scnprintf(buf, PAGE_SIZE, "%i\n",
+				apex_dev->hw_temp_warn2_en);
 		break;
 	case ATTR_TEMP_TRIP0:
 		ret = scnprintf(buf, PAGE_SIZE, "%i\n",
@@ -792,24 +790,28 @@ static ssize_t sysfs_store(struct device *device, struct device_attribute *attr,
 		gasket_read_modify_write_32(gasket_dev, APEX_BAR_INDEX,
 					    APEX_BAR2_REG_OMC0_D4, value, 10,
 					    16);
+		apex_dev->hw_temp_warn1_adc = value;
 		break;
 	case ATTR_TEMP_WARN2:
 		value = millic_to_adc(value);
 		gasket_read_modify_write_32(gasket_dev, APEX_BAR_INDEX,
 					    APEX_BAR2_REG_OMC0_D8, value, 10,
 					    16);
+		apex_dev->hw_temp_warn2_adc = value;
 		break;
 	case ATTR_TEMP_WARN1_EN:
 		value = value > 0 ? 1 : 0;
 		gasket_read_modify_write_32(gasket_dev, APEX_BAR_INDEX,
 					    APEX_BAR2_REG_OMC0_D4, value, 1,
 					    31);
+		apex_dev->hw_temp_warn1_en = !!value;
 		break;
 	case ATTR_TEMP_WARN2_EN:
 		value = value > 0 ? 1 : 0;
 		gasket_read_modify_write_32(gasket_dev, APEX_BAR_INDEX,
 					    APEX_BAR2_REG_OMC0_D8, value, 1,
 					    31);
+		apex_dev->hw_temp_warn2_en = !!value;
 		break;
 	case ATTR_TEMP_TRIP0:
 		value = millic_to_adc(value);
@@ -879,6 +881,7 @@ static struct gasket_sysfs_attribute apex_sysfs_attrs[] = {
 	GASKET_END_OF_ATTR_ARRAY
 };
 
+/* Stores kernel module parameters to device specific data buffer */
 static void apply_module_params(struct apex_dev *apex_dev) {
 	kernel_param_lock(THIS_MODULE);
 
@@ -898,23 +901,47 @@ static void apply_module_params(struct apex_dev *apex_dev) {
 	apex_dev->adc_trip_points[2] = millic_to_adc(trip_point2_temp);
 	atomic_set(&apex_dev->temp_poll_interval, temp_poll_interval);
 
+	apex_dev->hw_temp_warn1_adc = millic_to_adc(hw_temp_warn1);
+	apex_dev->hw_temp_warn2_adc = millic_to_adc(hw_temp_warn2);
+	apex_dev->hw_temp_warn1_en = hw_temp_warn1_en;
+	apex_dev->hw_temp_warn2_en = hw_temp_warn2_en;
+
+	kernel_param_unlock(THIS_MODULE);
+}
+
+/* Applies hw temp warning settings to device */
+static void program_hw_temp_warnings(struct apex_dev *apex_dev) {
 	gasket_read_modify_write_32(apex_dev->gasket_dev_ptr, APEX_BAR_INDEX,
 				    APEX_BAR2_REG_OMC0_D4,
-				    millic_to_adc(hw_temp_warn1), 10, 16);
+				    apex_dev->hw_temp_warn1_adc, 10, 16);
 	gasket_read_modify_write_32(apex_dev->gasket_dev_ptr, APEX_BAR_INDEX,
 				    APEX_BAR2_REG_OMC0_D8,
-				    millic_to_adc(hw_temp_warn2), 10, 16);
-	if (hw_temp_warn1_en)
+				    apex_dev->hw_temp_warn2_adc, 10, 16);
+	if (apex_dev->hw_temp_warn1_en)
 		gasket_read_modify_write_32(apex_dev->gasket_dev_ptr,
 					    APEX_BAR_INDEX,
 					    APEX_BAR2_REG_OMC0_D4, 1, 1, 31);
 
-	if (hw_temp_warn2_en)
+	if (apex_dev->hw_temp_warn2_en)
 		gasket_read_modify_write_32(apex_dev->gasket_dev_ptr,
 					    APEX_BAR_INDEX,
 					    APEX_BAR2_REG_OMC0_D8, 1, 1, 31);
+}
 
-	kernel_param_unlock(THIS_MODULE);
+static void enable_thermal_sensing(struct gasket_dev *gasket_dev) {
+	// Enable thermal sensor clocks
+	gasket_read_modify_write_32(gasket_dev, APEX_BAR_INDEX,
+				    APEX_BAR2_REG_OMC0_D0, 0x1, 1, 7);
+
+	// Enable thermal sensor (ENAD ENVR ENBG)
+	gasket_read_modify_write_32(gasket_dev, APEX_BAR_INDEX,
+				    APEX_BAR2_REG_OMC0_D8, 0x7, 3, 0);
+
+	// Enable OMC thermal sensor controller
+	// This bit should be asserted 100 us after ENAD ENVR ENBG
+	schedule_timeout(usecs_to_jiffies(100));
+	gasket_read_modify_write_32(gasket_dev, APEX_BAR_INDEX,
+				    APEX_BAR2_REG_OMC0_DC, 0x1, 1, 0);
 }
 
 static void check_temperature_work_handler(struct work_struct *work) {
@@ -1021,6 +1048,7 @@ static int apex_pci_probe(struct pci_dev *pci_dev,
 			  check_temperature_work_handler);
 	apex_dev->gasket_dev_ptr = gasket_dev;
 	apply_module_params(apex_dev);
+	program_hw_temp_warnings(apex_dev);
 	pci_set_drvdata(pci_dev, apex_dev);
 	apex_reset(gasket_dev);
 
@@ -1046,19 +1074,7 @@ static int apex_pci_probe(struct pci_dev *pci_dev,
 		goto remove_device;
 	}
 
-	// Enable thermal sensor clocks
-	gasket_read_modify_write_32(gasket_dev, APEX_BAR_INDEX,
-				    APEX_BAR2_REG_OMC0_D0, 0x1, 1, 7);
-
-	// Enable thermal sensor (ENAD ENVR ENBG)
-	gasket_read_modify_write_32(gasket_dev, APEX_BAR_INDEX,
-				    APEX_BAR2_REG_OMC0_D8, 0x7, 3, 0);
-
-	// Enable OMC thermal sensor controller
-	// This bit should be asserted 100 us after ENAD ENVR ENBG
-	schedule_timeout(usecs_to_jiffies(100));
-	gasket_read_modify_write_32(gasket_dev, APEX_BAR_INDEX,
-				    APEX_BAR2_REG_OMC0_DC, 0x1, 1, 0);
+	enable_thermal_sensing(gasket_dev);
 
 	ret = gasket_sysfs_create_entries(gasket_dev->dev_info.device,
 					  apex_sysfs_attrs);
@@ -1109,6 +1125,28 @@ remove_device:
 	pci_disable_device(pci_dev);
 }
 
+static int apex_pci_resume(struct pci_dev *pci_dev)
+{
+	struct apex_dev *apex_dev = pci_get_drvdata(pci_dev);
+	struct gasket_dev *gasket_dev;
+
+	if (!apex_dev) {
+		dev_err_once(&pci_dev->dev, "NULL apex_dev\n");
+		return -ENODEV;
+	}
+	gasket_dev = apex_dev->gasket_dev_ptr;
+
+	apex_reset(gasket_dev);
+	program_hw_temp_warnings(apex_dev);
+	enable_thermal_sensing(gasket_dev);
+
+	/* Place device in low power mode until opened */
+	if (allow_power_save)
+		apex_enter_reset(gasket_dev);
+
+	return 0;
+}
+
 static struct gasket_driver_desc apex_desc = {
 	.name = "apex",
 	.driver_version = APEX_DRIVER_VERSION,
@@ -1155,6 +1193,9 @@ static struct pci_driver apex_pci_driver = {
 	.name = "apex",
 	.probe = apex_pci_probe,
 	.remove = apex_pci_remove,
+#ifdef CONFIG_PM_SLEEP
+	.resume = apex_pci_resume,
+#endif
 	.id_table = apex_pci_ids,
 };
 
