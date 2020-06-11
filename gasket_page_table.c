@@ -50,6 +50,7 @@
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/pagemap.h>
+#include <linux/version.h>
 #include <linux/vmalloc.h>
 
 #include "gasket_constants.h"
@@ -532,7 +533,12 @@ static int gasket_perform_mapping(struct gasket_page_table *pg_tbl,
 				return -EINVAL;
 
 			/* Page already mapped for DMA. */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 1, 0)
 			ptes[i].dma_addr = sg_page_iter_dma_address(sg_iter);
+#else
+			ptes[i].dma_addr = sg_page_iter_dma_address(
+				container_of(sg_iter, struct sg_dma_page_iter, base));
+#endif
 			ptes[i].page = NULL;
 			offset = 0;
 		} else if (is_coherent(pg_tbl, host_addr)) {
