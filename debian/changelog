@@ -1,3 +1,9 @@
+gasket-dkms (1.0-14) unstable; urgency=low
+
+  * Unregister MSI-x interrupts in suspend.
+
+ -- Coral <coral-support@google.com>  Mon, 12 Oct 2020 15:26:54 -0700
+
 gasket-dkms (1.0-13) unstable; urgency=low
 
   * Fix compilation for 5.6+ kernels.
