@@ -1125,6 +1125,21 @@ remove_device:
 	pci_disable_device(pci_dev);
 }
 
+static int apex_pci_suspend(struct pci_dev *pci_dev, pm_message_t state) {
+	struct apex_dev *apex_dev = pci_get_drvdata(pci_dev);
+	struct gasket_dev *gasket_dev;
+
+	if (!apex_dev) {
+		dev_err_once(&pci_dev->dev, "NULL apex_dev\n");
+		return -ENODEV;
+	}
+
+	// Tear down MSI-x interrupts before suspending.
+	gasket_dev = apex_dev->gasket_dev_ptr;
+	gasket_interrupt_msix_cleanup(gasket_dev->interrupt_data);
+	return 0;
+}
+
 static int apex_pci_resume(struct pci_dev *pci_dev)
 {
 	struct apex_dev *apex_dev = pci_get_drvdata(pci_dev);
@@ -1136,6 +1151,7 @@ static int apex_pci_resume(struct pci_dev *pci_dev)
 	}
 	gasket_dev = apex_dev->gasket_dev_ptr;
 
+	gasket_interrupt_reinit(gasket_dev);
 	apex_reset(gasket_dev);
 	program_hw_temp_warnings(apex_dev);
 	enable_thermal_sensing(gasket_dev);
@@ -1194,6 +1210,7 @@ static struct pci_driver apex_pci_driver = {
 	.probe = apex_pci_probe,
 	.remove = apex_pci_remove,
 #ifdef CONFIG_PM_SLEEP
+	.suspend = apex_pci_suspend,
 	.resume = apex_pci_resume,
 #endif
 	.id_table = apex_pci_ids,

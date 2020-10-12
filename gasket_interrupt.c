@@ -395,9 +395,9 @@ int gasket_interrupt_init(struct gasket_dev *gasket_dev)
 
 	return 0;
 }
+EXPORT_SYMBOL(gasket_interrupt_init);
 
-static void
-gasket_interrupt_msix_cleanup(struct gasket_interrupt_data *interrupt_data)
+void gasket_interrupt_msix_cleanup(struct gasket_interrupt_data *interrupt_data)
 {
 	int i;
 
@@ -412,7 +412,9 @@ gasket_interrupt_msix_cleanup(struct gasket_interrupt_data *interrupt_data)
 		pci_disable_msix(interrupt_data->pci_dev);
 	interrupt_data->msix_configured = 0;
 	kfree(interrupt_data->msix_entries);
+	interrupt_data->msix_entries = NULL;
 }
+EXPORT_SYMBOL(gasket_interrupt_msix_cleanup);
 
 int gasket_interrupt_reinit(struct gasket_dev *gasket_dev)
 {
@@ -454,6 +456,7 @@ int gasket_interrupt_reinit(struct gasket_dev *gasket_dev)
 
 	return 0;
 }
+EXPORT_SYMBOL(gasket_interrupt_reinit);
 
 /* See gasket_interrupt.h for description. */
 int gasket_interrupt_reset_counts(struct gasket_dev *gasket_dev)
