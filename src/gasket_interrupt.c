@@ -9,7 +9,7 @@
 #include <linux/device.h>
 #include <linux/interrupt.h>
 #include <linux/printk.h>
-#include <linux/rwlock.h>
+#include <linux/spinlock.h>
 #include <linux/version.h>
 #ifdef GASKET_KERNEL_TRACE_SUPPORT
 #define CREATE_TRACE_POINTS
