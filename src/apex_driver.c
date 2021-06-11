@@ -29,7 +29,7 @@
 
 /* Constants */
 #define APEX_DEVICE_NAME "Apex"
-#define APEX_DRIVER_VERSION "1.1"
+#define APEX_DRIVER_VERSION "1.2"
 
 /* CSRs are in BAR 2. */
 #define APEX_BAR_INDEX 2

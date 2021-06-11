@@ -1,3 +1,9 @@
+gasket-dkms (1.0-16) unstable; urgency=low
+
+  * Bump module versions for Gasket and Apex
+
+ -- Coral <coral-support@google.com>  Fri, 11 Jun 2021 07:53:18 -0700
+
 gasket-dkms (1.0-15) unstable; urgency=low
 
   * Switch include of rwlock to spinlock (rwlock.h isn't intended to be
