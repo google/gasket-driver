@@ -228,7 +228,7 @@ struct gasket_coherent_buffer {
 	u8 __iomem *virt_base;
 
 	/* Physical base address. */
-	ulong phys_base;
+	dma_addr_t phys_base;
 
 	/* Length of the mapping. */
 	ulong length_bytes;
