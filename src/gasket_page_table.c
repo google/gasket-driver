@@ -56,6 +56,8 @@
 #include "gasket_constants.h"
 #include "gasket_core.h"
 
+MODULE_IMPORT_NS(DMA_BUF);
+
 /* Constants & utility macros */
 /* The number of pages that can be mapped into each second-level page table. */
 #define GASKET_PAGES_PER_SUBTABLE 512
