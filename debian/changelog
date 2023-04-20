@@ -1,3 +1,9 @@
+gasket-dkms (1.0-18) unstable; urgency=low
+
+  * Import DMA_BUF symbol namespace for kernels >= 5.16.
+
+ -- Coral <coral-support@google.com>  Thu, 24 Feb 2022 11:30:13 -0700
+
 gasket-dkms (1.0-17) unstable; urgency=low
 
   * Include a udev rule for access to the Apex group.
