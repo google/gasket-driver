@@ -27,6 +27,7 @@
 #include <linux/platform_device.h>
 #include <linux/printk.h>
 #include <linux/sched.h>
+#include <linux/version.h>
 
 #ifdef GASKET_KERNEL_TRACE_SUPPORT
 #define CREATE_TRACE_POINTS
@@ -1837,8 +1838,15 @@ int gasket_register_device(const struct gasket_driver_desc *driver_desc)
 	internal = &g_descs[desc_idx];
 	mutex_init(&internal->mutex);
 	memset(internal->devs, 0, sizeof(struct gasket_dev *) * GASKET_DEV_MAX);
-	internal->class =
-		class_create(driver_desc->module, driver_desc->name);
+
+    /* Function signature for `class_create()` is changed in kernel >= 6.4.x
+     * to only accept a single argument.
+     * */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
+    internal->class = class_create(driver_desc->module, driver_desc->name);
+#else
+    internal->class = class_create(driver_desc->name);
+#endif
 
 	if (IS_ERR(internal->class)) {
 		pr_err("Cannot register %s class [ret=%ld]\n",
