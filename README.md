@@ -7,7 +7,7 @@ The Coral Gasket Driver allows usage of the [Coral EdgeTPU](https://coral.ai/) o
 
 This repo contains both the source for direct integration into a kernel tree as well as the necessary files to generate a Debian DKMS package.
 
-## Building Debian DKMS pacakge
+## Building Debian DKMS package
 
 From the top level directory, execute:
 
