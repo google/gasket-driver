@@ -157,9 +157,13 @@ gasket_handle_interrupt(struct gasket_interrupt_data *interrupt_data,
 	trace_gasket_interrupt_event(interrupt_data->name, interrupt_index);
 	read_lock(&interrupt_data->eventfd_ctx_lock);
 	ctx = interrupt_data->eventfd_ctxs[interrupt_index];
-	if (ctx)
-		eventfd_signal(ctx, 1);
-	read_unlock(&interrupt_data->eventfd_ctx_lock);
+        if (ctx)
+                #if LINUX_VERSION_CODE >= KERNEL_VERSION(6,8,0)
+                        eventfd_signal(ctx);
+                #else
+                        eventfd_signal(ctx, 1);
+                #endif
+        read_unlock(&interrupt_data->eventfd_ctx_lock);
 
 	++(interrupt_data->interrupt_counts[interrupt_index]);
 }
