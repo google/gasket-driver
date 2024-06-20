@@ -1840,12 +1840,14 @@ int gasket_register_device(const struct gasket_driver_desc *driver_desc)
 	memset(internal->devs, 0, sizeof(struct gasket_dev *) * GASKET_DEV_MAX);
 
     /* Function signature for `class_create()` is changed in kernel >= 6.4.x
-     * to only accept a single argument.
+     * to only accept a single argument. This change was also backported to
+     * RHEL 9.4, whose kernel is nominally versioned 5.14.0.
      * */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 4, 0)
-    internal->class = class_create(driver_desc->module, driver_desc->name);
-#else
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0) || \
+    (defined RHEL_RELEASE_CODE && RHEL_RELEASE_CODE >= RHEL_RELEASE_VERSION(9, 4))
     internal->class = class_create(driver_desc->name);
+#else
+    internal->class = class_create(driver_desc->module, driver_desc->name);
 #endif
 
 	if (IS_ERR(internal->class)) {
